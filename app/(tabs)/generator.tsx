@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -54,7 +54,7 @@ const INITIAL_FORM_DATA: QRGeneratorForm = {
 
 export default function GeneratorScreen() {
   const params = useLocalSearchParams();
-  const { addQRCode } = useQRStore();
+  const { addQRCode, qrCodes } = useQRStore(); // Also get qrCodes to track changes
   const { 
     defaultForegroundColor, 
     defaultBackgroundColor, 
@@ -70,8 +70,8 @@ export default function GeneratorScreen() {
     size: defaultSize,
     errorCorrectionLevel: defaultErrorCorrection,
   });
-  const [previewQR, setPreviewQR] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
+  
   const viewShotRef = React.useRef<ViewShot>(null);
 
   // Handle initial params
@@ -82,13 +82,13 @@ export default function GeneratorScreen() {
     if (params.data && params.type === 'text') {
       setFormData(prev => ({ ...prev, text: params.data as string }));
     }
-  }, [params]);
+  }, [params.type, params.data]);
 
-  // Update preview when form data or customization changes
-  useEffect(() => {
+  // Memoize the preview QR object to prevent unnecessary re-renders
+  const previewQR = useMemo(() => {
     const qrData = formatQRData(selectedType, formData);
     if (qrData) {
-      setPreviewQR({
+      return {
         id: 'preview',
         type: selectedType,
         data: qrData,
@@ -96,10 +96,9 @@ export default function GeneratorScreen() {
         ...customization,
         createdAt: new Date(),
         isFavorite: false,
-      });
-    } else {
-      setPreviewQR(null);
+      };
     }
+    return null;
   }, [selectedType, formData, customization]);
 
   const handleFormChange = (data: Partial<QRGeneratorForm>) => {
@@ -111,7 +110,10 @@ export default function GeneratorScreen() {
   };
 
   const handleSave = async () => {
-    if (!previewQR) return;
+    if (!previewQR || !canGenerate()) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
 
     setIsSaving(true);
     
@@ -120,7 +122,8 @@ export default function GeneratorScreen() {
     }
 
     try {
-      await addQRCode({
+      // Create a new QR code object with a unique ID and current timestamp
+      const newQRCode = {
         type: previewQR.type,
         data: previewQR.data,
         title: previewQR.title,
@@ -130,7 +133,16 @@ export default function GeneratorScreen() {
         errorCorrectionLevel: previewQR.errorCorrectionLevel,
         logoUri: previewQR.logoUri,
         isFavorite: false,
-      });
+        createdAt: new Date(),
+      };
+
+      console.log('Saving QR Code:', newQRCode);
+      
+      // Wait for the QR code to be added
+      await addQRCode(newQRCode);
+      
+      // Add a small delay to ensure state is updated
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Show success animation
       Alert.alert(
@@ -138,11 +150,21 @@ export default function GeneratorScreen() {
         'QR code saved successfully',
         [
           { text: 'Create Another', onPress: resetForm },
-          { text: 'View History', onPress: () => router.push('/history') }
+          { 
+            text: 'View History', 
+            onPress: () => {
+              // Force navigation with params to refresh the screen
+              router.push({
+                pathname: '/history',
+                params: { refresh: Date.now().toString() }
+              });
+            }
+          }
         ]
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to save QR code');
+      console.error('Error saving QR code:', error);
+      Alert.alert('Error', 'Failed to save QR code. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -152,9 +174,11 @@ export default function GeneratorScreen() {
     if (!previewQR || !viewShotRef.current) return;
 
     try {
-      const uri = await viewShotRef.current.capture();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri);
+      if (viewShotRef.current && typeof viewShotRef.current.capture === 'function') {
+        const uri = await viewShotRef.current.capture();
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri);
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to share QR code');
@@ -164,6 +188,12 @@ export default function GeneratorScreen() {
   const resetForm = () => {
     setFormData(INITIAL_FORM_DATA);
     setSelectedType('text');
+    setCustomization({
+      foregroundColor: defaultForegroundColor,
+      backgroundColor: defaultBackgroundColor,
+      size: defaultSize,
+      errorCorrectionLevel: defaultErrorCorrection,
+    });
   };
 
   const canGenerate = () => {
@@ -218,7 +248,7 @@ export default function GeneratorScreen() {
         </View>
 
         {/* Preview */}
-        {previewQR && (
+        {previewQR && canGenerate() && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Preview</Text>
             <View style={styles.previewCard}>
@@ -264,11 +294,15 @@ export default function GeneratorScreen() {
         </View>
 
         {/* Actions */}
-        {previewQR && (
+        {previewQR && canGenerate() && (
           <View style={styles.section}>
             <View style={styles.actions}>
               <TouchableOpacity
-                style={[styles.actionButton, styles.saveButton]}
+                style={[
+                  styles.actionButton, 
+                  styles.saveButton,
+                  (!canGenerate() || isSaving) && styles.disabledButton
+                ]}
                 onPress={handleSave}
                 disabled={isSaving || !canGenerate()}
               >
@@ -281,6 +315,7 @@ export default function GeneratorScreen() {
               <TouchableOpacity
                 style={[styles.actionButton, styles.shareButton]}
                 onPress={handleShare}
+                disabled={isSaving}
               >
                 <Share size={20} color="#3B82F6" />
                 <Text style={[styles.actionButtonText, styles.shareButtonText]}>
@@ -399,6 +434,10 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#3B82F6',
+  },
+  disabledButton: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.6,
   },
   shareButton: {
     backgroundColor: '#fff',

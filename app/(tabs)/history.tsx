@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   TextInput,
   FlatList,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useQRStore } from '@/store/qrStore';
 import { QRCard } from '@/components/QRCard';
 import { QRType } from '@/types/qr';
@@ -28,13 +30,49 @@ const FILTER_OPTIONS = [
 ];
 
 export default function HistoryScreen() {
+  const params = useLocalSearchParams();
   const { qrCodes, favorites, searchQRCodes, filterByType, clearHistory } = useQRStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<QRType | 'all'>('all');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [localQRCodes, setLocalQRCodes] = useState(qrCodes);
+  const [localFavorites, setLocalFavorites] = useState(favorites);
+
+  // Update local state when store changes
+  useEffect(() => {
+    setLocalQRCodes(qrCodes);
+    setLocalFavorites(favorites);
+  }, [qrCodes, favorites]);
+
+  // Refresh data when screen is focused or params change
+  useFocusEffect(
+    React.useCallback(() => {
+      setLocalQRCodes(qrCodes);
+      setLocalFavorites(favorites);
+    }, [qrCodes, favorites])
+  );
+
+  // Handle refresh parameter
+  useEffect(() => {
+    if (params.refresh) {
+      setLocalQRCodes(qrCodes);
+      setLocalFavorites(favorites);
+    }
+  }, [params.refresh, qrCodes, favorites]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    // Simulate a small delay and then refresh the data
+    setTimeout(() => {
+      setLocalQRCodes(qrCodes);
+      setLocalFavorites(favorites);
+      setRefreshing(false);
+    }, 500);
+  };
 
   const getFilteredQRCodes = () => {
-    let codes = showFavoritesOnly ? favorites : qrCodes;
+    let codes = showFavoritesOnly ? localFavorites : localQRCodes;
     
     if (selectedFilter !== 'all') {
       codes = codes.filter(qr => qr.type === selectedFilter);
@@ -70,10 +108,12 @@ export default function HistoryScreen() {
     if (Platform.OS === 'web') {
       if (window.confirm('Are you sure you want to clear all history?')) {
         clearHistory();
+        setLocalQRCodes([]);
       }
     } else {
       // For mobile, you might want to implement a native alert
       clearHistory();
+      setLocalQRCodes([]);
     }
   };
 
@@ -152,7 +192,7 @@ export default function HistoryScreen() {
             styles.filterChipText,
             showFavoritesOnly && styles.activeFilterChipText
           ]}>
-            Favorites ({favorites.length})
+            Favorites ({localFavorites.length})
           </Text>
         </TouchableOpacity>
 
@@ -185,10 +225,19 @@ export default function HistoryScreen() {
         ListEmptyComponent={renderEmptyState}
         numColumns={2}
         columnWrapperStyle={styles.row}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#3B82F6']}
+            tintColor="#3B82F6"
+          />
+        }
+        extraData={localQRCodes.length} // Force re-render when data changes
       />
 
       {/* Clear History Button */}
-      {qrCodes.length > 0 && !showFavoritesOnly && (
+      {localQRCodes.length > 0 && !showFavoritesOnly && (
         <TouchableOpacity
           style={styles.clearButton}
           onPress={handleClearHistory}
