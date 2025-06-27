@@ -67,9 +67,7 @@ export default function SettingsScreen() {
 
   const handleRateApp = () => {
     // In a real app, you would use the actual app store URLs
-    const appStoreUrl = Platform.OS === 'ios' 
-      ? 'https://apps.apple.com/app/id123456789'
-      : 'https://play.google.com/store/apps/details?id=com.yourapp';
+    const appStoreUrl = 'https://play.google.com/'
     
     Linking.openURL(appStoreUrl);
   };
@@ -118,7 +116,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Appearance */}
-        <SettingSection title="Appearance">
+        {/* <SettingSection title="Appearance">
           <SettingRow
             icon={<Moon size={20} color="#3B82F6" />}
             title="Theme"
@@ -136,7 +134,7 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           </SettingRow>
-        </SettingSection>
+        </SettingSection> */}
 
         {/* Default QR Customization */}
         <SettingSection title="Default QR Appearance">
