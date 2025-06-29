@@ -175,6 +175,7 @@ export default function HistoryScreen() {
         horizontal 
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filtersContainer}
+        style={styles.filtersScrollView}
       >
         <TouchableOpacity
           style={[
@@ -188,12 +189,14 @@ export default function HistoryScreen() {
             color={showFavoritesOnly ? '#fff' : '#3B82F6'}
             fill={showFavoritesOnly ? '#fff' : 'none'}
           />
-          <Text style={[
-            styles.filterChipText,
-            showFavoritesOnly && styles.activeFilterChipText
-          ]}>
-            Favorites ({localFavorites.length})
-          </Text>
+          <View style={styles.filterTextContainer}>
+            <Text style={[
+              styles.filterChipText,
+              showFavoritesOnly && styles.activeFilterChipText
+            ]}>
+              Favorites ({localFavorites.length})
+            </Text>
+          </View>
         </TouchableOpacity>
 
         {FILTER_OPTIONS.map((option) => (
@@ -205,12 +208,14 @@ export default function HistoryScreen() {
             ]}
             onPress={() => handleFilterSelect(option.value)}
           >
-            <Text style={[
-              styles.filterChipText,
-              selectedFilter === option.value && !showFavoritesOnly && styles.activeFilterChipText
-            ]}>
-              {option.label}
-            </Text>
+            <View style={styles.filterTextContainer}>
+              <Text style={[
+                styles.filterChipText,
+                selectedFilter === option.value && !showFavoritesOnly && styles.activeFilterChipText
+              ]}>
+                {option.label}
+              </Text>
+            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -297,31 +302,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
   },
+  filtersScrollView: {
+    flexGrow: 0,
+  },
   filtersContainer: {
     paddingHorizontal: 20,
     paddingBottom: 16,
+    flexGrow: 1,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#3B82F6',
     marginRight: 8,
+    minWidth: 60,
+    minHeight: 36,
+    flexShrink: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   activeFilterChip: {
     backgroundColor: '#3B82F6',
     borderColor: '#3B82F6',
   },
+  filterTextContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
   filterChipText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: '#3B82F6',
-    marginLeft: 4,
     fontFamily: 'Inter-Regular',
+    textAlign: 'center',
+    flexShrink: 1,
   },
   activeFilterChipText: {
     color: '#fff',

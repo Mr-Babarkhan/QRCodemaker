@@ -1,22 +1,23 @@
 import { Tabs } from 'expo-router';
-import { Home, QrCode, History, Settings } from 'lucide-react-native';
+import { Home, QrCode, History, Settings, Scan } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#3B82F6',
         tabBarInactiveTintColor: '#666',
-        
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: '#f8fafc',
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
           paddingTop: 5,
           height: 75,
-        marginBottom: 1
+          marginBottom: 1
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -39,6 +40,15 @@ export default function TabLayout() {
           title: 'Generate',
           tabBarIcon: ({ size, color }) => (
             <QrCode size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="scanner"
+        options={{
+          title: 'Scanner',
+          tabBarIcon: ({ size, color }) => (
+            <Scan size={size} color={color} />
           ),
         }}
       />
