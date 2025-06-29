@@ -36,14 +36,29 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   isLoading: false,
 
   updateSetting: async (key, value) => {
-    const newSettings = { ...get(), [key]: value };
-    set({ [key]: value } as any);
+    // Create a type-safe update function
+    const updateState = (state: SettingsStore) => {
+      const newState = { ...state };
+      (newState as any)[key] = value;
+      return newState;
+    };
+    
+    set(updateState);
 
     try {
-      const settingsToSave = Object.keys(DEFAULT_SETTINGS).reduce((acc, k) => {
-        acc[k as keyof Settings] = newSettings[k as keyof Settings];
-        return acc;
-      }, {} as Settings);
+      // Get the current state after update
+      const currentState = get();
+      
+      // Extract only the settings properties for storage
+      const settingsToSave: Settings = {
+        theme: currentState.theme,
+        hapticFeedback: currentState.hapticFeedback,
+        defaultForegroundColor: currentState.defaultForegroundColor,
+        defaultBackgroundColor: currentState.defaultBackgroundColor,
+        defaultSize: currentState.defaultSize,
+        defaultErrorCorrection: currentState.defaultErrorCorrection,
+        autoSaveToGallery: currentState.autoSaveToGallery,
+      };
       
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsToSave));
     } catch (error) {
@@ -57,8 +72,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     try {
       const storedSettings = await AsyncStorage.getItem(SETTINGS_KEY);
       if (storedSettings) {
-        const settings = JSON.parse(storedSettings);
-        set({ ...settings });
+        const settings: Partial<Settings> = JSON.parse(storedSettings);
+        // Merge with current state to preserve any new settings that might not be in storage
+        set((state) => ({ ...state, ...settings }));
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -68,7 +84,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   resetSettings: async () => {
-    set({ ...DEFAULT_SETTINGS });
+    set((state) => ({ ...state, ...DEFAULT_SETTINGS }));
     
     try {
       await AsyncStorage.removeItem(SETTINGS_KEY);

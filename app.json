@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/qrcode.png",
+      "image": "./assets/images/bgr.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },

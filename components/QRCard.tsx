@@ -33,7 +33,7 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
 
   const handleShare = async () => {
     try {
-      if (viewShotRef.current) {
+      if (viewShotRef.current && typeof viewShotRef.current.capture === 'function') {
         const uri = await viewShotRef.current.capture();
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(uri);
