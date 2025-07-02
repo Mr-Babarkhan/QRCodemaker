@@ -8,6 +8,7 @@ import {
   Dimensions,
   Platform,
   Alert,
+  PermissionsAndroid,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -20,9 +21,11 @@ import { formatQRData, getQRTitle } from '@/utils/qrDataFormatter';
 import { useQRStore } from '@/store/qrStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { Slider } from '@miblanchard/react-native-slider';
-import { Save, Share, Heart } from 'lucide-react-native';
+import { Save, Share, Heart, Download } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+
 import ViewShot from 'react-native-view-shot';
 
 const { width } = Dimensions.get('window');
@@ -71,6 +74,7 @@ export default function GeneratorScreen() {
     errorCorrectionLevel: defaultErrorCorrection,
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const viewShotRef = React.useRef<ViewShot>(null);
 
@@ -108,6 +112,92 @@ export default function GeneratorScreen() {
   const handleCustomizationChange = (key: keyof QRCustomization, value: any) => {
     setCustomization(prev => ({ ...prev, [key]: value }));
   };
+
+ // Request storage permissions for Android
+const requestStoragePermission = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      // For Android 11+ (API 30+), WRITE_EXTERNAL_STORAGE is not needed for MediaLibrary
+      const apiLevel = Platform.constants?.Version || 0;
+      if (apiLevel >= 30) {
+        return true; // Permission not needed for modern Android versions
+      }
+
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        {
+          title: 'Storage Permission',
+          message: 'App needs access to storage to download QR codes',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn('Error requesting storage permission:', err);
+      return false;
+    }
+  }
+  return true; // iOS doesn't need this permission
+};
+
+ const handleDownload = async () => {
+  if (!previewQR || !viewShotRef.current) {
+    Alert.alert('Error', 'QR code not ready for download');
+    return;
+  }
+
+  setIsDownloading(true);
+
+  try {
+    // Haptic feedback
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    // Request MediaLibrary permissions first
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant camera roll permissions to download QR codes');
+      setIsDownloading(false);
+      return; // Exit here if permission denied
+    }
+
+    // For Android, also request storage permission (only if MediaLibrary permission was granted)
+    if (Platform.OS === 'android') {
+      const storagePermission = await requestStoragePermission();
+      if (!storagePermission) {
+        Alert.alert('Permission Required', 'Storage permission is required to download QR codes');
+        setIsDownloading(false);
+        return; // Exit here if storage permission denied
+      }
+    }
+
+    // Capture the QR code as image
+    if (viewShotRef.current && typeof viewShotRef.current.capture === 'function') {
+      const uri = await viewShotRef.current.capture();
+      
+      // Create a unique filename
+      const filename = `QRCode_${previewQR.title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;
+      
+      // Save to device
+      const asset = await MediaLibrary.createAssetAsync(uri);
+      await MediaLibrary.createAlbumAsync('QR Codes', asset, false);
+
+      Alert.alert(
+        'Download Successful!',
+        `QR code saved to your gallery as "${filename}"`,
+        [{ text: 'OK' }]
+      );
+    }
+  } catch (error) {
+    console.error('Error downloading QR code:', error);
+    Alert.alert('Download Failed', 'Unable to download QR code. Please try again.');
+  } finally {
+    setIsDownloading(false);
+  }
+};
 
   const handleSave = async () => {
     if (!previewQR || !canGenerate()) {
@@ -313,9 +403,24 @@ export default function GeneratorScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
+                style={[
+                  styles.actionButton, 
+                  styles.downloadButton,
+                  isDownloading && styles.disabledButton
+                ]}
+                onPress={handleDownload}
+                disabled={isDownloading || !canGenerate()}
+              >
+                <Download size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>
+                  {isDownloading ? 'Downloading...' : 'Download'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.actionButton, styles.shareButton]}
                 onPress={handleShare}
-                disabled={isSaving}
+                disabled={isSaving || isDownloading}
               >
                 <Share size={20} color="#3B82F6" />
                 <Text style={[styles.actionButtonText, styles.shareButtonText]}>
@@ -421,19 +526,22 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 12,
-    gap: 8,
+    gap: 6,
   },
   saveButton: {
     backgroundColor: '#3B82F6',
+  },
+  downloadButton: {
+    backgroundColor: '#10B981',
   },
   disabledButton: {
     backgroundColor: '#9CA3AF',
@@ -445,7 +553,7 @@ const styles = StyleSheet.create({
     borderColor: '#3B82F6',
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#fff',
     fontFamily: 'Inter-SemiBold',

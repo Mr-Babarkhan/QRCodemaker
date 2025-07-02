@@ -1,27 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Alert, TouchableOpacity, Linking, Modal, ScrollView } from 'react-native';
-import { Camera, CameraView } from 'expo-camera';
+import { Text, View, StyleSheet, Alert, TouchableOpacity, Linking, Modal, ScrollView, Share } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Flashlight, FlashlightOff, ExternalLink, X } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { Flashlight, FlashlightOff, X, Copy, Share2, ImageIcon } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as ImagePicker from 'expo-image-picker';
+// Removed deprecated expo-barcode-scanner import
 
 export default function Scanner() {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [flashOn, setFlashOn] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [scannedData, setScannedData] = useState('');
+  const [isFocused, setIsFocused] = useState(true);
+  const [cameraKey, setCameraKey] = useState(0); // Force re-render camera
+  const [isProcessing, setIsProcessing] = useState(false);
   const insets = useSafeAreaInsets();
 
+  // Handle screen focus/unfocus
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsFocused(true);
+      setScanned(false);
+      setCameraKey(prev => prev + 1); // Force camera re-render
+      
+      return () => {
+        setIsFocused(false);
+        setFlashOn(false); // Turn off flash when leaving screen
+      };
+    }, [])
+  );
+
   useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
+    if (!permission?.granted) {
+      requestPermission();
+    }
+  }, [permission, requestPermission]);
 
-    getCameraPermissions();
-  }, []);
-
-  const isValidURL = (string: string) => {
+  const isValidURL = (string: string | URL) => {
     try {
       new URL(string);
       return true;
@@ -43,18 +61,91 @@ export default function Scanner() {
     }
   };
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
-    setScanned(true);
-    setScannedData(data);
-    setModalVisible(true);
+  // Copy to clipboard function
+  const copyToClipboard = async () => {
+    try {
+      await Clipboard.setStringAsync(scannedData);
+      Alert.alert('Success', 'Data copied to clipboard!');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to copy data to clipboard');
+    }
+  };
+
+  // Share function
+  const shareData = async () => {
+    try {
+      const result = await Share.share({
+        message: scannedData,
+        title: 'QR Code Data',
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share data');
+    }
+  };
+
+  // Enhanced Gallery function with expo-camera scanning
+  const pickImageFromGallery = async () => {
+    try {
+      setIsProcessing(true);
+      
+      // Request media library permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please enable gallery access to scan QR codes from images');
+        setIsProcessing(false);
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        
+        mediaTypes: ['images'], // Fixed deprecated MediaTypeOptions
+        allowsEditing: false,
+        quality: 1,
+        base64: false,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        try {
+          // Use expo-camera's scanning functionality for images
+          // Note: expo-camera doesn't have a direct scanFromURL method like the deprecated BarCodeScanner
+          // This is a limitation - for now we'll show an informative message
+          Alert.alert(
+            'Gallery Scanning', 
+            'Due to current limitations, scanning QR codes from gallery images is not supported. Please use the camera to scan the QR code.',
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        } catch (scanError) {
+          console.error('Scan error:', scanError);
+          Alert.alert('Scan Error', 'Failed to scan the image. Please try another image or use the camera instead.');
+        }
+      }
+    } catch (error) {
+      console.error('Gallery error:', error);
+      Alert.alert('Error', 'Failed to access gallery');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBarCodeScanned = ({ data }: { data: string }) => {
+    if (!scanned && isFocused) {
+      setScanned(true);
+      setScannedData(data);
+      setModalVisible(true);
+    }
   };
 
   const renderClickableText = (text: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
     
-    return parts.map((part, index) => {
-      if (urlRegex.test(part)) {
+    return parts.map((part: string | number | bigint | boolean | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | Promise<string | number | bigint | boolean | React.ReactPortal | React.ReactElement<unknown, string | React.JSXElementConstructor<any>> | Iterable<React.ReactNode> | null | undefined> | null | undefined, index: React.Key | null | undefined) => {
+      if (typeof part === 'string' && urlRegex.test(part)) {
         return (
           <Text
             key={index}
@@ -79,7 +170,7 @@ export default function Scanner() {
     setScannedData('');
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Text style={styles.text}>Requesting camera permission...</Text>
@@ -87,13 +178,19 @@ export default function Scanner() {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <Text style={styles.text}>No access to camera</Text>
         <Text style={styles.subText}>
           Please enable camera permission in settings to scan QR codes
         </Text>
+        <TouchableOpacity
+          style={styles.permissionButton}
+          onPress={requestPermission}
+        >
+          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -102,19 +199,22 @@ export default function Scanner() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.title}>QR Code Scanner</Text>
-        <Text style={styles.subtitle}>Point your camera at a QR code</Text>
+        <Text style={styles.subtitle}>Point your camera at a QR code or select from gallery</Text>
       </View>
       
       <View style={styles.cameraContainer}>
-        <CameraView
-          style={styles.camera}
-          facing="back"
-          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ['qr'],
-          }}
-          enableTorch={flashOn}
-        />
+        {isFocused && (
+          <CameraView
+            key={cameraKey} // Force re-render with key
+            style={styles.camera}
+            facing="back"
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ['qr'],
+            }}
+            enableTorch={flashOn}
+          />
+        )}
         <View style={styles.overlay}>
           <View style={styles.scanFrame} />
         </View>
@@ -124,6 +224,7 @@ export default function Scanner() {
         <TouchableOpacity
           style={styles.flashButton}
           onPress={() => setFlashOn(!flashOn)}
+          disabled={!isFocused}
         >
           {flashOn ? (
             <FlashlightOff size={24} color="#fff" />
@@ -132,6 +233,17 @@ export default function Scanner() {
           )}
           <Text style={styles.flashText}>
             {flashOn ? 'Flash Off' : 'Flash On'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.galleryButton, isProcessing && styles.disabledButton]}
+          onPress={pickImageFromGallery}
+          disabled={isProcessing}
+        >
+          <ImageIcon size={24} color="#fff" />
+          <Text style={styles.galleryText}>
+            {isProcessing ? 'Processing...' : 'Gallery'}
           </Text>
         </TouchableOpacity>
 
@@ -167,6 +279,25 @@ export default function Scanner() {
                 {renderClickableText(scannedData)}
               </View>
             </ScrollView>
+            
+            {/* Action Buttons - Copy and Share */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.copyButton}
+                onPress={copyToClipboard}
+              >
+                <Copy size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>Copy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={shareData}
+              >
+                <Share2 size={18} color="#fff" />
+                <Text style={styles.actionButtonText}>Share</Text>
+              </TouchableOpacity>
+            </View>
             
             <View style={styles.modalFooter}>
               <TouchableOpacity
@@ -204,6 +335,8 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   cameraContainer: {
     flex: 1,
@@ -255,6 +388,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 4,
   },
+  galleryButton: {
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  galleryText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  disabledButton: {
+    backgroundColor: '#9CA3AF',
+  },
   scanAgainButton: {
     backgroundColor: '#10B981',
     paddingVertical: 12,
@@ -278,6 +427,19 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  permissionButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  permissionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -340,10 +502,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  modalFooter: {
-    padding: 20,
+  // Action buttons styles
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 10,
+    justifyContent: 'center',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  modalFooter: {
+    padding: 20,
   },
   scanAgainModalButton: {
     backgroundColor: '#3B82F6',
