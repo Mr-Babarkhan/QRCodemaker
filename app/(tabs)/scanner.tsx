@@ -236,7 +236,7 @@ export default function Scanner() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={[styles.galleryButton, isProcessing && styles.disabledButton]}
           onPress={pickImageFromGallery}
           disabled={isProcessing}
@@ -245,7 +245,7 @@ export default function Scanner() {
           <Text style={styles.galleryText}>
             {isProcessing ? 'Processing...' : 'Gallery'}
           </Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {scanned && (
           <TouchableOpacity

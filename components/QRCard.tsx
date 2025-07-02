@@ -1,18 +1,20 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
   StyleSheet, 
   Platform,
-  Alert
+  Alert,
+  PermissionsAndroid
 } from 'react-native';
 import { QRCode } from '@/types/qr';
 import { QRCodeDisplay } from './QRCodeDisplay';
-import { Heart, Share, Trash2 } from 'lucide-react-native';
+import { Heart, Share, Trash2, Download } from 'lucide-react-native';
 import { useQRStore } from '@/store/qrStore';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 import ViewShot from 'react-native-view-shot';
 
 interface QRCardProps {
@@ -23,6 +25,36 @@ interface QRCardProps {
 export function QRCard({ qrCode, onPress }: QRCardProps) {
   const { toggleFavorite, deleteQRCode } = useQRStore();
   const viewShotRef = React.useRef<ViewShot>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Request storage permissions for Android
+  const requestStoragePermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        // For Android 11+ (API 30+), WRITE_EXTERNAL_STORAGE is not needed for MediaLibrary
+        const apiLevel = Platform.constants?.Version || 0;
+        if (apiLevel >= 30) {
+          return true; // Permission not needed for modern Android versions
+        }
+
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          {
+            title: 'Storage Permission',
+            message: 'App needs access to storage to download QR codes',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn('Error requesting storage permission:', err);
+        return false;
+      }
+    }
+    return true; // iOS doesn't need this permission
+  };
 
   const handleFavorite = async () => {
     if (Platform.OS !== 'web') {
@@ -41,6 +73,64 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
       }
     } catch (error) {
       console.error('Error sharing QR code:', error);
+      Alert.alert('Error', 'Failed to share QR code');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!viewShotRef.current) {
+      Alert.alert('Error', 'QR code not ready for download');
+      return;
+    }
+
+    setIsDownloading(true);
+
+    try {
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      // Request MediaLibrary permissions first
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permissions to download QR codes');
+        setIsDownloading(false);
+        return; // Exit here if permission denied
+      }
+
+      // For Android, also request storage permission (only if MediaLibrary permission was granted)
+      if (Platform.OS === 'android') {
+        const storagePermission = await requestStoragePermission();
+        if (!storagePermission) {
+          Alert.alert('Permission Required', 'Storage permission is required to download QR codes');
+          setIsDownloading(false);
+          return; // Exit here if storage permission denied
+        }
+      }
+
+      // Capture the QR code as image
+      if (viewShotRef.current && typeof viewShotRef.current.capture === 'function') {
+        const uri = await viewShotRef.current.capture();
+        
+        // Create a unique filename
+        const filename = `QRCode_${qrCode.title.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;
+        
+        // Save to device
+        const asset = await MediaLibrary.createAssetAsync(uri);
+        await MediaLibrary.createAlbumAsync('QR Codes', asset, false);
+
+        Alert.alert(
+          'Download Successful!',
+          `QR code saved to your gallery as "${filename}"`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error downloading QR code:', error);
+      Alert.alert('Download Failed', 'Unable to download QR code. Please try again.');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -98,6 +188,20 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
           onPress={handleShare}
         >
           <Share size={20} color="#666" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            isDownloading && styles.disabledButton
+          ]}
+          onPress={handleDownload}
+          disabled={isDownloading}
+        >
+          <Download 
+            size={20} 
+            color={isDownloading ? '#999' : '#10B981'} 
+          />
         </TouchableOpacity>
         
         <TouchableOpacity
@@ -158,11 +262,15 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
+    gap: 12,
   },
   actionButton: {
     padding: 8,
     borderRadius: 8,
     backgroundColor: '#f5f5f5',
+  },
+  disabledButton: {
+    backgroundColor: '#e5e5e5',
+    opacity: 0.6,
   },
 });
