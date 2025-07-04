@@ -177,7 +177,7 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
           onPress={handleFavorite}
         >
           <Heart 
-            size={20} 
+            size={18} 
             color={qrCode.isFavorite ? '#FF6B6B' : '#666'}
             fill={qrCode.isFavorite ? '#FF6B6B' : 'none'}
           />
@@ -187,7 +187,7 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
           style={styles.actionButton}
           onPress={handleShare}
         >
-          <Share size={20} color="#666" />
+          <Share size={18} color="#666" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -199,7 +199,7 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
           disabled={isDownloading}
         >
           <Download 
-            size={20} 
+            size={18} 
             color={isDownloading ? '#999' : '#10B981'} 
           />
         </TouchableOpacity>
@@ -208,7 +208,7 @@ export function QRCard({ qrCode, onPress }: QRCardProps) {
           style={styles.actionButton}
           onPress={handleDelete}
         >
-          <Trash2 size={20} color="#FF4444" />
+          <Trash2 size={18} color="#FF4444" />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -219,6 +219,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
+    marginTop: 18,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionButton: {
-    padding: 8,
+    padding: 4,
     borderRadius: 8,
     backgroundColor: '#f5f5f5',
   },
