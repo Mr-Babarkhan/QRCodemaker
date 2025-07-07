@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "916621596057",
+    "project_id": "qrcodemaker-19c40",
+    "storage_bucket": "qrcodemaker-19c40.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:916621596057:android:6b92e828e66a3b5e22ef08",
+        "android_client_info": {
+          "package_name": "com.babartech.qrcodegenerator"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCtRDvnE12dT07Q2U6TCqQnEH0xnMYL1o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
